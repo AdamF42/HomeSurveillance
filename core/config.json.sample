@@ -1,0 +1,51 @@
+{
+  "//": "These double slash are used as comments, because JSON doesnt' allow comment",
+  "//": "general settings",
+  "general": {
+    "internalPort": "8080",
+    "internalIp":"192.168.1.222"
+  },
+  "//": "telegram bot settings",
+  "telegram": {
+    "//": "telegram bot authorization token",
+    "token": "YOUR_TELEGRAM_BOT_TOKEN",
+    "//": "telegram IDs of the bot owner(s). only owners can interact with the bot",
+    "ids": [ URER1ID, USER2ID ]
+  },
+  "//": "Certificates directory",
+  "certificates": {
+    "certificatesPath":"certificates",
+    "ca_certificate":"ca.crt",
+    "client_certificate":"core/core.cert",
+    "client_key":"core/core.key"
+  },
+  "//": "mosquitto server settings",
+  "mosquitto": {
+    "addr":"192.168.1.222",
+    "fileconf": "/etc/mosquitto/mosquitto.conf"
+  },
+
+  "//": "mqtt client settings",
+  "mqtt": {
+    "serverAddr":"192.168.1.222",
+    "serverPort": 8883,
+    "mqttKeepalive": 60
+  },
+
+  "//": "cams settings",
+  "cams": {
+    "cam01": {
+      "externalPort":"55556",
+      "port":"8081",
+      "addr":"192.168.1.223",
+      "src":"http://192.168.1.222:8081/?action=stream"
+    }
+  },
+
+  "//": "human detection settings",
+  "human_detection" : {
+    "detectionPath":"detection",
+    "prototxt": "MobileNetSSD_deploy.prototxt.txt",
+    "model": "MobileNetSSD_deploy.caffemodel",
+    "confidence": 0.2
+  }

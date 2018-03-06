@@ -99,3 +99,21 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+cam/certificates/
+
+core/certificates/stunnel\.conf
+
+core/certificates/ca\.key
+
+core/certificates/ca\.crt
+
+core/certificates/core/
+
+core/certificates/cam01/
+
+core/detection/MobileNetSSD_deploy\.caffemodel
+
+core/detection/MobileNetSSD_deploy\.prototxt\.txt
+
+core/config\.json
