@@ -15,7 +15,6 @@ import paho.mqtt.client as mqtt
 import json
 import subprocess
 import socket
-import logging
 from threading import Thread, Condition
 import traceback
 
@@ -139,13 +138,16 @@ def retryer(max_retries=30, timeout=5):
 class Camera:
     """ add description
     """
+
     mjpg_streamer_pid = None
     active_instance = None
 
     def __init__(self, name):
         """ inizilize the mjpg-streamer as subprocess.
+
         You shoud first export the mjpg-streamer installation
         folder doing export LD_LIBRARY_PATH="$(pwd)"     """
+
         self.port = 8080
         self.name = name
         # set the streaming variable to False: we're not streaming
@@ -206,6 +208,14 @@ class Camera:
         logger.info("Start streaming")
         # continue exectute mjpg_streamer
         os.kill(self.mjpg_streamer_pid, signal.SIGCONT)
+        # check if mjpg_streamer is streaming
+        try:
+            self.socket_read_check()
+        except Exception as e:
+            logger.error(str(e))
+            logger.error(traceback.format_exc())
+            logger.error("mjpg_streamer is not streaming")
+            sys.exit(1)
         self._streaming = True
 
     def stream_stop(self):
