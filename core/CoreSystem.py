@@ -1,3 +1,7 @@
+"""Inspired to:
+- https://github.com/scaidermern/piCamBot
+- https://github.com/FutureSharks/rpi-security
+"""
 from CONST import *
 import json
 import logging
@@ -105,9 +109,6 @@ class Detector():
 
 class coreSys:
     """ The coreSys create the check if a cam send an alert then warn the user.
-    Inspired to:
-    - https://github.com/scaidermern/piCamBot
-    - https://github.com/FutureSharks/rpi-security
     """
     commands_topic = ""
     processed_commands_topic = ""
