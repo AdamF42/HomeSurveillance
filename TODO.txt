@@ -1,0 +1,2 @@
+- Block frame processor process and clean the queues
+- Add an event to block Cam sending alert while streaming

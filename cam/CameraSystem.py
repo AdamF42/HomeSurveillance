@@ -101,7 +101,7 @@ class Camera:
           [
               "mjpg_streamer",
               "-i",
-              "input_raspicam.so",
+              "input_raspicam.so -rot 180 -fps 5",
               "-o",
               "output_http.so -p 8080"
           ],
@@ -161,7 +161,7 @@ class Camera:
         #     logger.error(traceback.format_exc())
         #     logger.error("mjpg_streamer is not streaming")
         #     sys.exit(1)
-        # self._streaming = True
+        self._streaming = True
 
     def stream_stop(self):
         # stop the mjpg_streamer deamon
@@ -250,14 +250,22 @@ class MQTTmsgProcessor:
                     if command == CMD_STREAM_START:
                         logger.info("Received the msg: {0}".format(command))
 
+
+                        # # Reset the internal flag to false. Subsequently,
+                        # # threads calling wait() will block until set() is
+                        # # called to set the internal flag to true again.
+                        # MQTTmsgProcessor.active_instance.is_streaming.clear()
+
                         camera.stream_start()
                         is_command_processed = True
                     elif command == CMD_STREAM_STOP:
                         logger.info("Received the msg: {0}".format(command))
+
                         # Set the internal flag to true. All threads waiting
                         # for it to become true are awakened. Threads that call
                         # wait() once the flag is true will not block at all.
-                        MQTTmsgProcessor.active_instance.is_streaming.set()
+                        # MQTTmsgProcessor.active_instance.is_streaming.set()
+
                         # logger.debug(
                         #    "Event is True: Waiting Threads can proceed")
                         camera.stream_stop()
@@ -285,6 +293,7 @@ class MQTTmsgProcessor:
 
     def send_alert(self):
         """ Send alert msg to the Core """
+        # MQTTmsgProcessor.active_instance.is_streaming.wait()
         response_message = json.dumps({
                 ALERT_KEY:
                 MOTION_DETECTED
@@ -301,7 +310,8 @@ class MQTTmsgProcessor:
 
 
 if __name__ == "__main__":
-
+    # streaming = Event()
+    # streaming.set()
     # create a Camera object
     camera = Camera("cam01")
     # create a pir sensor thread
@@ -326,14 +336,18 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal_handler)
 
     while True:
-        # Reset the internal flag to false. Subsequently,
-        # threads calling wait() will block until set() is
-        # called to set the internal flag to true again.
-        MQTTmsgProcessor.active_instance.is_streaming.clear()
+        # # Reset the internal flag to false. Subsequently,
+        # # threads calling wait() will block until set() is
+        # # called to set the internal flag to true again.
+        # MQTTmsgProcessor.active_instance.is_streaming.clear()
+
+
         # logger.debug("Event is False")
         # logger.debug("Waiting for motion...")
         sensor.wait_for_motion()
         logger.info("Motion Detected!")
-        processor.send_alert()
-        logger.info("Alert Sent!")
-        processor.wait_for_stop_streaming()
+        if not camera.is_streaming():
+            processor.send_alert()
+            logger.info("Alert Sent!")
+        sensor.wait_for_no_motion()
+        # processor.wait_for_stop_streaming()
