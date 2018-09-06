@@ -35,23 +35,23 @@ STUNNEL_CORE_GLOBAL_CONFIG_TEMPLATE = """
 debug = 7
 output = stunnel.log
 ; *************************************************
-; * Single cam options *
+; * Single Cam options *
 ;**************************************************
 """
 
 STUNNEL_CORE_CONFIG_TEMPLATE = """
-[%(cam)s]
-key = %(absolute)s/%(cam)s.key
-cert = %(absolute)s/%(cam)s.cert
+[%(Cam)s]
+key = %(absolute)s/%(Cam)s.key
+cert = %(absolute)s/%(Cam)s.cert
 client = yes
 accept = %(outport)s
 connect = %(camaddr)s:%(inport)s
 """
 
 STUNNEL_CAM_CONFIG_TEMPLATE = """
-[%(cam)s]
-key = %(cam)s.key
-cert = %(cam)s.cert
+[%(Cam)s]
+key = %(Cam)s.key
+cert = %(Cam)s.cert
 CAfile = ca.crt
 client = no
 debug = 7
@@ -110,7 +110,7 @@ def gencert(domain, name, rootdir=MYDIR, keysize=KEY_SIZE, days=DAYS,
         return os.path.join(name, '%s.%s' % (name, ext))
 
     os.chdir(rootdir)
-    # Check if the cam# directory already exists
+    # Check if the Cam# directory already exists
     os.makedirs(name, exist_ok=True)
     # Check if the certificates exists, if not generate them
     if not os.path.exists(dfile('key')):
@@ -150,7 +150,7 @@ def addstunnelclient(name, outport, camaddr, inport, rootdir=MYDIR):
         createstunnelconf()
 
     config = open("stunnel.conf", 'a')
-    config.write(STUNNEL_CORE_CONFIG_TEMPLATE % {'cam': name,
+    config.write(STUNNEL_CORE_CONFIG_TEMPLATE % {'Cam': name,
                  'absolute': rootdir, 'outport': outport, 'inport': inport,
                  'camaddr': camaddr})
     config.close()
@@ -160,7 +160,7 @@ def addstunnelclient(name, outport, camaddr, inport, rootdir=MYDIR):
 #     os.chdir(os.path.join(rootdir, name))
 #
 #     config = open("stunnel.conf", 'w')
-#     config.write(STUNNEL_CAM_CONFIG_TEMPLATE % {'cam': name,
+#     config.write(STUNNEL_CAM_CONFIG_TEMPLATE % {'Cam': name,
 #                  'absolute': rootdir, 'outport': outport, 'inport': inport,
 #                  'camaddr': camaddr})
 #     config.close()
@@ -169,7 +169,7 @@ def addstunnelcam(name, camaddr, inport, rootdir=MYDIR):
     os.chdir(os.path.join(rootdir, name))
 
     config = open("stunnel.conf", 'w')
-    config.write(STUNNEL_CAM_CONFIG_TEMPLATE % {'cam': name,
+    config.write(STUNNEL_CAM_CONFIG_TEMPLATE % {'Cam': name,
                  'absolute': rootdir, 'inport': inport, 'camaddr': camaddr})
     config.close()
 
@@ -184,13 +184,13 @@ if __name__ == "__main__":
     for cam in config["cams"]:
         cam_configuration_port = config["cams"][cam]["port"]
         caddr = config["cams"][cam]["addr"]
-        # generate certificates for cam
+        # generate certificates for Cam
         gencert(caddr, cam)
-        # add cam to Core stunnel.config
+        # add Cam to Core stunnel.config
         addstunnelclient(cam, cam_configuration_port, caddr, str(in_port))
-        # create stunnel.config for cam
+        # create stunnel.config for Cam
         addstunnelcam(cam, caddr, str(in_port))
-        # copy the ca.crt in cam folder
+        # copy the ca.crt in Cam folder
         copyfile("../ca.crt", "ca.crt")
         # in_port += 1
         # out_port += 1
