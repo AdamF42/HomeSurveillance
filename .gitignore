@@ -117,3 +117,5 @@ core/detection/MobileNetSSD_deploy\.caffemodel
 core/detection/MobileNetSSD_deploy\.prototxt\.txt
 
 core/config\.json
+
+\.idea/
