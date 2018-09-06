@@ -15,8 +15,7 @@ import paho.mqtt.client as mqtt
 import json
 import subprocess
 import socket
-import logging
-from threading import Thread, Condition
+from threading import Thread, Event
 import traceback
 
 
@@ -49,63 +48,7 @@ mqtt_server_host = "192.168.1.222"
 mqtt_server_port = 8883
 mqtt_keepalive = 60
 # ########################## Camera Streaming Port ############################
-# port = 8080
-
-
-class PirSensor(Thread):
-    """ A deamon thread that monitor a pir sensor setted on a channel. It
-    provides a mechanism to make the caller aware of detection even if it is
-    running in background. You need to use the is_detected function in order
-    to use the deamon, otherwise it will be stuck on a condition.wait(). """
-
-    def __init__(self, channel):
-        Thread.__init__(self)
-        # condition variable will be used to sync the value read operation
-        self.is_read = Condition()
-        # set the value to read to false
-        self.motion_detected = False
-        # set up pin as input
-        self.pir = MotionSensor(channel)
-        # terminate this thread when main program finishes
-        self.daemon = True
-        # start thread running
-        self.start()
-
-    def is_detected(self):
-            # ###################### Acquire the lock #######################
-            self.is_read.acquire()
-            # save the detection variable value
-            retvalue = self.motion_detected
-            if self.motion_detected is True:
-                # set the detection variable to false
-                self.motion_detected = False
-            # notifies that the value was read
-            self.is_read.notify()
-            # ####################### Relese the lock #######################
-            self.is_read.release()
-            return retvalue
-
-    def run(self):
-        while True:
-            try:
-                # wait until the motion sensor is activated
-                self.pir.wait_for_motion()
-                logger.info("Detected")
-                # ##################### Acquire the lock ######################
-                self.is_read.acquire()
-                # releases the lock, blocks the current execution until notify
-                self.is_read.wait()
-                # set the detection variable to true
-                self.motion_detected = True
-                # ###################### Relese the lock ######################
-                self.is_read.release()
-                # Pause the cycle until the motion sensor is deactivated
-                self.pir.wait_for_no_motion()
-                logger.info("Not Detected")
-
-            except (ValueError):
-                logger.error("Impossible to read pir sensor")
-                break
+port = 8080
 
 
 class NetworkError(RuntimeError):
@@ -139,13 +82,16 @@ def retryer(max_retries=30, timeout=5):
 class Camera:
     """ add description
     """
+
     mjpg_streamer_pid = None
     active_instance = None
 
     def __init__(self, name):
         """ inizilize the mjpg-streamer as subprocess.
+
         You shoud first export the mjpg-streamer installation
         folder doing export LD_LIBRARY_PATH="$(pwd)"     """
+
         self.port = 8080
         self.name = name
         # set the streaming variable to False: we're not streaming
@@ -155,7 +101,7 @@ class Camera:
           [
               "mjpg_streamer",
               "-i",
-              "input_raspicam.so",
+              "input_raspicam.so -rot 180 -fps 5",
               "-o",
               "output_http.so -p 8080"
           ],
@@ -206,6 +152,15 @@ class Camera:
         logger.info("Start streaming")
         # continue exectute mjpg_streamer
         os.kill(self.mjpg_streamer_pid, signal.SIGCONT)
+        # It require too much time. Better not to check.
+        # # check if mjpg_streamer is streaming
+        # try:
+        #     self.socket_read_check()
+        # except Exception as e:
+        #     logger.error(str(e))
+        #     logger.error(traceback.format_exc())
+        #     logger.error("mjpg_streamer is not streaming")
+        #     sys.exit(1)
         self._streaming = True
 
     def stream_stop(self):
@@ -214,12 +169,9 @@ class Camera:
         logger.info("Stop streaming")
         self._streaming = False
 
-    # def getStreamerPid(self):
-    #     return self.pid
 
-
-class MsgProcessor:
-    """The MsgProcessor object initiate a conection to the MQTT broker, then
+class MQTTmsgProcessor:
+    """The MQTTmsgProcessor object initiate a conection to the MQTT broker, then
     continuously check received messages and reply.
     The publish_message method can be used to send messages. """
 
@@ -231,32 +183,38 @@ class MsgProcessor:
     def __init__(self, camera):
         self.name = camera.name
         self.camera = camera
-        MsgProcessor.commands_topic = "commands/{}".format(self.name)
-        MsgProcessor.processed_commands_topic = "processedcommands/{}".format(
+        MQTTmsgProcessor.commands_topic = "commands/{}".format(self.name)
+        MQTTmsgProcessor.processed_commands_topic = "processedcommands/{}".format(
             self.name)
-        MsgProcessor.motion_detection_topic = "motiondeteciontopic/{}".format(
+        MQTTmsgProcessor.motion_detection_topic = "motiondeteciontopic/{}".format(
             self.name)
         self.client = mqtt.Client(protocol=mqtt.MQTTv311)
-        self.client.on_connect = MsgProcessor.on_connect
-        self.client.on_message = MsgProcessor.on_message
-        self.client.on_subscribe = MsgProcessor.on_subscribe
-        self.client.on_publish = MsgProcessor.on_publish
+        self.client.on_connect = MQTTmsgProcessor.on_connect
+        self.client.on_message = MQTTmsgProcessor.on_message
+        self.client.on_subscribe = MQTTmsgProcessor.on_subscribe
+        # self.client.on_publish = MQTTmsgProcessor.on_publish
         self.client.tls_set(ca_certs=ca_certificate,
                             certfile=client_certificate,
                             keyfile=client_key)
         self.client.connect(host=mqtt_server_host,
                             port=mqtt_server_port,
                             keepalive=mqtt_keepalive)
-        MsgProcessor.active_instance = self
+        self.is_streaming = Event()
+        self.is_streaming.set()
+        MQTTmsgProcessor.active_instance = self
 
-    @staticmethod
-    def on_publish(client, userdata, mid):
-        logger.debug("Published message id: {}".format(mid))
+    def wait_for_stop_streaming(self):
+        logger.info("Waiting for Core to unlock...")
+        MQTTmsgProcessor.active_instance.is_streaming.wait()
+
+    # @staticmethod
+    # def on_publish(client, userdata, mid):
+    #     logger.debug("Published message id: {}".format(mid))
 
     @staticmethod
     def on_disconnect(client, userdata, rc):
         logger.error("{} disconnected".format(
-            MsgProcessor.active_instance.name))
+            MQTTmsgProcessor.active_instance.name))
 
     @staticmethod
     def on_connect(client, userdata, flags, rc):
@@ -265,7 +223,7 @@ class MsgProcessor:
             mqtt_server_host))
         # subscribe to the broker to receive cmd from Core
         client.subscribe(
-            MsgProcessor.commands_topic,
+            MQTTmsgProcessor.commands_topic,
             qos=2)
 
     @staticmethod
@@ -274,28 +232,46 @@ class MsgProcessor:
 
     @staticmethod
     def on_message(client, userdata, msg):
-        """ Called when the client receives the PUBLISH msg from the broker """
+
+        """ Called when the client receives the PUBLISH msg from the broker
+        """
         # check if it is a command
-        if msg.topic == MsgProcessor.commands_topic:
+        if msg.topic == MQTTmsgProcessor.commands_topic:
             # decode the message payload
             payload_string = msg.payload.decode('utf-8')
-            logger.info("Received the msg: {0}".format(payload_string))
             try:
                 # Deserialize s (a str, bytes or bytearray instance containing
                 # a JSON document) to a Python object
                 message_dictionary = json.loads(payload_string)
                 if COMMAND_KEY in message_dictionary:
                     command = message_dictionary[COMMAND_KEY]
-                    camera = MsgProcessor.active_instance.camera
+                    camera = MQTTmsgProcessor.active_instance.camera
                     is_command_processed = False
                     if command == CMD_STREAM_START:
+                        logger.info("Received the msg: {0}".format(command))
+
+
+                        # # Reset the internal flag to false. Subsequently,
+                        # # threads calling wait() will block until set() is
+                        # # called to set the internal flag to true again.
+                        # MQTTmsgProcessor.active_instance.is_streaming.clear()
+
                         camera.stream_start()
                         is_command_processed = True
                     elif command == CMD_STREAM_STOP:
+                        logger.info("Received the msg: {0}".format(command))
+
+                        # Set the internal flag to true. All threads waiting
+                        # for it to become true are awakened. Threads that call
+                        # wait() once the flag is true will not block at all.
+                        # MQTTmsgProcessor.active_instance.is_streaming.set()
+
+                        # logger.debug(
+                        #    "Event is True: Waiting Threads can proceed")
                         camera.stream_stop()
                         is_command_processed = True
                     if is_command_processed:
-                        MsgProcessor.active_instance.pub_msg(
+                        MQTTmsgProcessor.active_instance.pub_msg(
                             message_dictionary)
                     else:
                         logger.warn("Unknown command.")
@@ -305,7 +281,7 @@ class MsgProcessor:
 
     def pub_msg(self, message):
         """ Send message to the Core """
-        logger.debug(message)
+        # logger.debug(message)
         response_message = json.dumps({
                 SUCCESFULLY_PROCESSED_COMMAND_KEY:
                 message[COMMAND_KEY]
@@ -317,6 +293,7 @@ class MsgProcessor:
 
     def send_alert(self):
         """ Send alert msg to the Core """
+        # MQTTmsgProcessor.active_instance.is_streaming.wait()
         response_message = json.dumps({
                 ALERT_KEY:
                 MOTION_DETECTED
@@ -326,18 +303,27 @@ class MsgProcessor:
             payload=response_message
             )
 
-    def process_commands(self):
-        self.client.loop()
+    def getMQTTUpdates(self):
+
+        logger.info("Starting looping")
+        self.client.loop_start()
 
 
 if __name__ == "__main__":
-
+    # streaming = Event()
+    # streaming.set()
     # create a Camera object
     camera = Camera("cam01")
     # create a pir sensor thread
-    sensor = PirSensor(17)
-    # create a MsgProcessor object
-    processor = MsgProcessor(camera)
+    sensor = MotionSensor(17)
+    # create a MQTTmsgProcessor object
+    processor = MQTTmsgProcessor(camera)
+
+    # create a thread to handle the mqtt messages
+    mqtt_thread = Thread(
+        target=processor.getMQTTUpdates, name="MQTTCoreCli")
+    mqtt_thread.daemon = True
+    mqtt_thread.start()
 
     def signal_handler(signum, frame):
         logger.debug("Received signal {}".format(signum))
@@ -350,10 +336,18 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal_handler)
 
     while True:
-        # check if the motion sensor detected something
-        if sensor.is_detected() and not camera.is_streaming():
-            # send the alert
+        # # Reset the internal flag to false. Subsequently,
+        # # threads calling wait() will block until set() is
+        # # called to set the internal flag to true again.
+        # MQTTmsgProcessor.active_instance.is_streaming.clear()
+
+
+        # logger.debug("Event is False")
+        # logger.debug("Waiting for motion...")
+        sensor.wait_for_motion()
+        logger.info("Motion Detected!")
+        if not camera.is_streaming():
             processor.send_alert()
-            logger.info("Alert Sent")
-        # check if there is some message in the buffer
-        processor.process_commands()
+            logger.info("Alert Sent!")
+        sensor.wait_for_no_motion()
+        # processor.wait_for_stop_streaming()
